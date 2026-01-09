@@ -1,4 +1,5 @@
 name: Pufferfishes Industrial Builder
+
 on:
   repository_dispatch:
     types: [build_request]
@@ -10,6 +11,7 @@ jobs:
       - name: Checkout Developer Repo
         uses: actions/checkout@v4
         with:
+          # This grabs the code from the repo the user just "Imported"
           repository: ${{ github.event.client_payload.repo_full_name }}
           path: 'app-source'
 
@@ -22,25 +24,31 @@ jobs:
         run: |
           cd app-source
           npm install
+          # Runs the build command if it exists (vite build, npm run build, etc.)
           npm run build --if-present
 
       - name: Package Dist Folder
         run: |
           cd app-source
-          # This checks for common build folders like 'dist' or 'build'
+          # Looks for common output folders and zips the contents
           if [ -d "dist" ]; then
             cd dist && zip -r ../../bundle.zip .
           elif [ -d "build" ]; then
             cd build && zip -r ../../bundle.zip .
           else
-            echo "Error: No build folder found!"
+            echo "Error: No build folder (dist or build) found! Your app must have a build script."
             exit 1
           fi
 
-      - name: Upload to Firebase Storage
-        uses: simple-elf/firebase-storage-upload@v1
+      - name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
         with:
-          serviceAccountKey: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          bucket: "pufferfishes-v2.firebasestorage.app" 
-          source: "bundle.zip"
-          destination: "bundles/${{ github.event.client_payload.app_id }}.zip"
+          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+
+      - name: 'Upload to Firebase Storage'
+        uses: 'google-github-actions/upload-cloud-storage@v2'
+        with:
+          path: 'bundle.zip'
+          # !!! IMPORTANT: Check this bucket name against your Firebase Storage console !!!
+          destination: 'pufferfishes-v2.firebasestorage.app/bundles/${{ github.event.client_payload.app_id }}.zip'
+          parent: false
