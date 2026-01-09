@@ -1,0 +1,46 @@
+name: Pufferfishes Industrial Builder
+on:
+  repository_dispatch:
+    types: [build_request]
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Developer Repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.client_payload.repo_full_name }}
+          path: 'app-source'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install & Build
+        run: |
+          cd app-source
+          npm install
+          npm run build --if-present
+
+      - name: Package Dist Folder
+        run: |
+          cd app-source
+          # This checks for common build folders like 'dist' or 'build'
+          if [ -d "dist" ]; then
+            cd dist && zip -r ../../bundle.zip .
+          elif [ -d "build" ]; then
+            cd build && zip -r ../../bundle.zip .
+          else
+            echo "Error: No build folder found!"
+            exit 1
+          fi
+
+      - name: Upload to Firebase Storage
+        uses: simple-elf/firebase-storage-upload@v1
+        with:
+          serviceAccountKey: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          bucket: "pufferfishes-v2.firebasestorage.app" 
+          source: "bundle.zip"
+          destination: "bundles/${{ github.event.client_payload.app_id }}.zip"
