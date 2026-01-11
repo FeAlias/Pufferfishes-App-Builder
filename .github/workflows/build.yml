@@ -48,3 +48,4 @@ jobs:
           path: 'bundle.zip'
           destination: 'pufferfishes-v2.firebasestorage.app/bundles/${{ github.event.client_payload.app_id }}.zip'
           parent: false
+ 
