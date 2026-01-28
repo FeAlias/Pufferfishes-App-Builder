@@ -53,6 +53,38 @@ jobs:
           cd target-app
           echo "Repository cloned successfully"
 
+      - name: Fix Google AI Studio dependencies
+        run: |
+          cd target-app
+
+          # Google AI Studio exports use @google/genai which doesn't exist on npm
+          # The actual package is @google/generative-ai
+          if grep -q '"@google/genai"' package.json; then
+            echo "Detected Google AI Studio export - fixing @google/genai dependency..."
+
+            # Replace @google/genai with @google/generative-ai
+            sed -i 's/"@google\/genai"/"@google\/generative-ai"/g' package.json
+
+            # Also need to update any version constraints that might not exist
+            # The current version of @google/generative-ai is 0.21.0+
+            sed -i 's/"@google\/generative-ai": "0.2.1"/"@google\/generative-ai": "^0.21.0"/g' package.json
+
+            echo "Fixed package.json:"
+            cat package.json | grep -A 2 -B 2 "generative-ai" || true
+          fi
+
+          # Also check for import statements that need updating
+          # Google AI Studio uses: import { GoogleGenAI } from "@google/genai"
+          # Real package uses: import { GoogleGenerativeAI } from "@google/generative-ai"
+          echo "Checking for import statement fixes needed..."
+          find . -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" | head -20 | while read file; do
+            if grep -q '@google/genai' "$file" 2>/dev/null; then
+              echo "Fixing imports in: $file"
+              sed -i 's/@google\/genai/@google\/generative-ai/g' "$file"
+              sed -i 's/GoogleGenAI/GoogleGenerativeAI/g' "$file"
+            fi
+          done
+
       - name: Detect framework and install dependencies
         id: detect
         run: |
