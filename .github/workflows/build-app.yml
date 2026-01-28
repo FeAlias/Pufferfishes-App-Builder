@@ -66,7 +66,7 @@ jobs:
 
           # Install dependencies
           echo "Installing dependencies..."
-          npm install
+          npm install --legacy-peer-deps
 
           # Detect build script
           BUILD_SCRIPT=$(node -pe "JSON.parse(fs.readFileSync('package.json')).scripts.build || 'build'")
