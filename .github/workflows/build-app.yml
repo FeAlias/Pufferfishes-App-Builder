@@ -1,0 +1,174 @@
+name: Build PWA App
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_url:
+        description: 'GitHub repository URL to build'
+        required: true
+        type: string
+      app_id:
+        description: 'App ID in PufferFishes database'
+        required: true
+        type: string
+      callback_url:
+        description: 'Callback URL to notify when build completes'
+        required: true
+        type: string
+      app_name:
+        description: 'Name of the app'
+        required: false
+        type: string
+
+jobs:
+  build-pwa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout builder repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install builder dependencies
+        run: npm ci
+
+      - name: Clone target repository
+        run: |
+          echo "Cloning ${{ inputs.repo_url }}"
+          git clone "${{ inputs.repo_url }}" target-app
+          cd target-app
+          echo "Repository cloned successfully"
+
+      - name: Detect framework and install dependencies
+        id: detect
+        run: |
+          cd target-app
+
+          # Check if package.json exists
+          if [ ! -f "package.json" ]; then
+            echo "ERROR: No package.json found. This doesn't appear to be a Node.js project."
+            exit 1
+          fi
+
+          # Install dependencies
+          echo "Installing dependencies..."
+          npm install
+
+          # Detect build script
+          BUILD_SCRIPT=$(node -pe "JSON.parse(fs.readFileSync('package.json')).scripts.build || 'build'")
+          echo "build_script=$BUILD_SCRIPT" >> $GITHUB_OUTPUT
+
+          # Detect if React app
+          if grep -q "\"react\":" package.json; then
+            echo "framework=react" >> $GITHUB_OUTPUT
+            echo "Detected: React application"
+          else
+            echo "framework=unknown" >> $GITHUB_OUTPUT
+            echo "Detected: Generic Node.js application"
+          fi
+
+      - name: Build application
+        run: |
+          cd target-app
+          echo "Running build script: ${{ steps.detect.outputs.build_script }}"
+          npm run ${{ steps.detect.outputs.build_script }}
+
+          # Find build output directory
+          if [ -d "build" ]; then
+            BUILD_DIR="build"
+          elif [ -d "dist" ]; then
+            BUILD_DIR="dist"
+          elif [ -d "out" ]; then
+            BUILD_DIR="out"
+          else
+            echo "ERROR: Could not find build output directory (build/, dist/, or out/)"
+            exit 1
+          fi
+
+          echo "BUILD_DIR=$BUILD_DIR" >> $GITHUB_ENV
+          echo "Build output found in: $BUILD_DIR"
+
+      - name: Inject PWA assets
+        run: |
+          cd target-app
+
+          # Run PWA injection script
+          node ../scripts/build-pwa.js \
+            --build-dir "$BUILD_DIR" \
+            --app-id "${{ inputs.app_id }}" \
+            --app-name "${{ inputs.app_name || 'PufferFish App' }}" \
+            --repo-url "${{ inputs.repo_url }}"
+
+          echo "PWA assets injected successfully"
+
+      - name: Upload to Cloudflare R2
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          cd target-app/$BUILD_DIR
+
+          # Install AWS CLI for R2 upload
+          pip install awscli
+
+          # Configure AWS CLI for R2
+          aws configure set aws_access_key_id $R2_ACCESS_KEY_ID
+          aws configure set aws_secret_access_key $R2_SECRET_ACCESS_KEY
+
+          # Upload all files to R2
+          echo "Uploading files to R2..."
+          aws s3 sync . s3://$R2_BUCKET_NAME/apps/${{ inputs.app_id }}/ \
+            --endpoint-url $R2_ENDPOINT \
+            --no-progress \
+            --delete
+
+          echo "Upload completed successfully"
+
+      - name: Notify PufferFishes (Success)
+        if: success()
+        run: |
+          curl -X POST "${{ inputs.callback_url }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"app_id\": \"${{ inputs.app_id }}\",
+              \"status\": \"success\",
+              \"bundle_key\": \"apps/${{ inputs.app_id }}/index.html\",
+              \"manifest_url\": \"https://pufferfishes.net/apps/${{ inputs.app_id }}/manifest.json\",
+              \"install_url\": \"https://pufferfishes.net/apps/${{ inputs.app_id }}/\",
+              \"pwa_scope\": \"/apps/${{ inputs.app_id }}/\",
+              \"theme_color\": \"#4F46E5\",
+              \"icon_url\": \"https://pufferfishes.net/apps/${{ inputs.app_id }}/icons/icon-192.png\",
+              \"secret\": \"${{ secrets.CALLBACK_SECRET }}\"
+            }"
+
+          echo "Build success notification sent"
+
+      - name: Notify PufferFishes (Failure)
+        if: failure()
+        run: |
+          # Extract error from previous steps if available
+          ERROR_MSG="Build failed. Check GitHub Actions logs for details."
+
+          curl -X POST "${{ inputs.callback_url }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"app_id\": \"${{ inputs.app_id }}\",
+              \"status\": \"failed\",
+              \"error_message\": \"$ERROR_MSG\",
+              \"secret\": \"${{ secrets.CALLBACK_SECRET }}\"
+            }"
+
+          echo "Build failure notification sent"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf target-app
+          echo "Cleanup completed"

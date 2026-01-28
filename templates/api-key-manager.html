@@ -1,0 +1,146 @@
+<script>
+  // Gemini API Key Manager for PWA
+  (function() {
+    const STORAGE_KEY = 'pufferfishes_gemini_api_key';
+
+    // Create global API key manager
+    window.PUFFERFISHES_API_KEY_MANAGER = {
+      getKey: function() {
+        return localStorage.getItem(STORAGE_KEY);
+      },
+
+      setKey: function(key) {
+        localStorage.setItem(STORAGE_KEY, key);
+        console.log('[PufferFishes] API key saved');
+        hidePrompt();
+      },
+
+      hasKey: function() {
+        const key = this.getKey();
+        return key && key.length > 0;
+      },
+
+      clearKey: function() {
+        localStorage.removeItem(STORAGE_KEY);
+        console.log('[PufferFishes] API key cleared');
+        showPrompt();
+      },
+
+      promptForKey: function() {
+        showPrompt();
+      }
+    };
+
+    let promptContainer;
+
+    function showPrompt() {
+      if (promptContainer) {
+        promptContainer.style.display = 'flex';
+        return;
+      }
+
+      // Create modal overlay
+      promptContainer = document.createElement('div');
+      promptContainer.id = 'pwa-api-key-prompt';
+
+      Object.assign(promptContainer.style, {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        right: '0',
+        bottom: '0',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: '10000',
+        fontFamily: 'system-ui, -apple-system, sans-serif'
+      });
+
+      const modal = document.createElement('div');
+      Object.assign(modal.style, {
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '32px',
+        maxWidth: '400px',
+        width: '90%',
+        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+      });
+
+      modal.innerHTML = `
+        <h2 style="margin: 0 0 8px 0; font-size: 24px; font-weight: 700; color: #1F2937;">
+          Gemini API Key Required
+        </h2>
+        <p style="margin: 0 0 24px 0; font-size: 14px; color: #6B7280; line-height: 1.5;">
+          This app uses your personal Google Gemini API key. Your key stays on your device and is never sent to PufferFishes servers.
+        </p>
+        <input
+          type="password"
+          id="pwa-api-key-input"
+          placeholder="Enter your Gemini API key"
+          style="width: 100%; padding: 12px; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 14px; margin-bottom: 16px; box-sizing: border-box; font-family: monospace;"
+        />
+        <div style="display: flex; gap: 12px;">
+          <button id="pwa-api-key-save" style="flex: 1; padding: 12px; background-color: #4F46E5; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;">
+            Save Key
+          </button>
+          <button id="pwa-api-key-cancel" style="padding: 12px 24px; background-color: #F3F4F6; color: #374151; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;">
+            Cancel
+          </button>
+        </div>
+        <p style="margin: 16px 0 0 0; font-size: 12px; color: #9CA3AF;">
+          <a href="https://aistudio.google.com/apikey" target="_blank" style="color: #4F46E5; text-decoration: none;">
+            Get your API key here
+          </a>
+        </p>
+      `;
+
+      promptContainer.appendChild(modal);
+      document.body.appendChild(promptContainer);
+
+      // Event listeners
+      const input = document.getElementById('pwa-api-key-input');
+      const saveBtn = document.getElementById('pwa-api-key-save');
+      const cancelBtn = document.getElementById('pwa-api-key-cancel');
+
+      saveBtn.addEventListener('click', () => {
+        const key = input.value.trim();
+        if (key) {
+          window.PUFFERFISHES_API_KEY_MANAGER.setKey(key);
+        } else {
+          alert('Please enter a valid API key');
+        }
+      });
+
+      cancelBtn.addEventListener('click', () => {
+        hidePrompt();
+      });
+
+      input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          saveBtn.click();
+        }
+      });
+
+      // Focus input
+      setTimeout(() => input.focus(), 100);
+    }
+
+    function hidePrompt() {
+      if (promptContainer) {
+        promptContainer.style.display = 'none';
+      }
+    }
+
+    // Auto-prompt if no key is stored (after 1 second delay to let app load)
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        if (!window.PUFFERFISHES_API_KEY_MANAGER.hasKey()) {
+          showPrompt();
+        }
+      }, 1000);
+    });
+
+    console.log('[PufferFishes] API Key Manager loaded');
+  })();
+</script>

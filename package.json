@@ -1,0 +1,18 @@
+{
+  "name": "pufferfishes-app-builder",
+  "version": "1.0.0",
+  "description": "Automated PWA builder for PufferFishes marketplace",
+  "main": "scripts/build-pwa.js",
+  "scripts": {
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "keywords": [
+    "pwa",
+    "builder",
+    "pufferfishes"
+  ],
+  "author": "PufferFishes",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}

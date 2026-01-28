@@ -1,0 +1,136 @@
+<script>
+  // PWA Install Prompt
+  (function() {
+    let deferredPrompt;
+    let installButton;
+
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        const swPath = window.location.pathname.endsWith('/')
+          ? window.location.pathname + 'service-worker.js'
+          : window.location.pathname + '/service-worker.js';
+
+        navigator.serviceWorker.register(swPath, {
+          scope: window.location.pathname.split('/').slice(0, -1).join('/') + '/'
+        })
+        .then((registration) => {
+          console.log('[PWA] Service Worker registered:', registration.scope);
+
+          // Check for updates
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                // New service worker available
+                console.log('[PWA] New version available!');
+                if (confirm('New version available! Reload to update?')) {
+                  window.location.reload();
+                }
+              }
+            });
+          });
+        })
+        .catch((error) => {
+          console.error('[PWA] Service Worker registration failed:', error);
+        });
+      });
+    }
+
+    // Listen for beforeinstallprompt event
+    window.addEventListener('beforeinstallprompt', (e) => {
+      console.log('[PWA] Install prompt available');
+      e.preventDefault();
+      deferredPrompt = e;
+
+      // Show install button
+      showInstallButton();
+    });
+
+    function showInstallButton() {
+      // Create install button if it doesn't exist
+      if (!installButton) {
+        installButton = document.createElement('button');
+        installButton.id = 'pwa-install-btn';
+        installButton.innerHTML = `
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Install App
+        `;
+
+        // Style the button
+        Object.assign(installButton.style, {
+          position: 'fixed',
+          bottom: '20px',
+          right: '20px',
+          padding: '12px 24px',
+          backgroundColor: '#4F46E5',
+          color: 'white',
+          border: 'none',
+          borderRadius: '8px',
+          fontSize: '14px',
+          fontWeight: '600',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+          zIndex: '9999',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          transition: 'transform 0.2s, box-shadow 0.2s'
+        });
+
+        installButton.addEventListener('mouseenter', () => {
+          installButton.style.transform = 'translateY(-2px)';
+          installButton.style.boxShadow = '0 6px 12px rgba(0, 0, 0, 0.15)';
+        });
+
+        installButton.addEventListener('mouseleave', () => {
+          installButton.style.transform = 'translateY(0)';
+          installButton.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+        });
+
+        installButton.addEventListener('click', async () => {
+          if (!deferredPrompt) {
+            return;
+          }
+
+          // Show install prompt
+          deferredPrompt.prompt();
+
+          // Wait for user response
+          const { outcome } = await deferredPrompt.userChoice;
+          console.log(`[PWA] User response: ${outcome}`);
+
+          if (outcome === 'accepted') {
+            console.log('[PWA] App installed');
+          }
+
+          // Clear the prompt
+          deferredPrompt = null;
+
+          // Hide button
+          installButton.remove();
+          installButton = null;
+        });
+
+        document.body.appendChild(installButton);
+      }
+    }
+
+    // Handle app installed event
+    window.addEventListener('appinstalled', () => {
+      console.log('[PWA] App installed successfully');
+      if (installButton) {
+        installButton.remove();
+        installButton = null;
+      }
+      deferredPrompt = null;
+    });
+
+    console.log('[PWA] Install prompt script loaded');
+  })();
+</script>
