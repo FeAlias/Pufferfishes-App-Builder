@@ -38,9 +38,18 @@ jobs:
         run: npm install
 
       - name: Clone target repository
+        env:
+          BUILDER_PAT: ${{ secrets.BUILDER_PAT }}
         run: |
           echo "Cloning ${{ inputs.repo_url }}"
-          git clone "${{ inputs.repo_url }}" target-app
+
+          # Convert HTTPS URL to use token authentication for private repos
+          CLONE_URL="${{ inputs.repo_url }}"
+          if [[ "$CLONE_URL" == https://github.com/* ]]; then
+            CLONE_URL="https://x-access-token:${BUILDER_PAT}@${CLONE_URL#https://}"
+          fi
+
+          git clone "$CLONE_URL" target-app
           cd target-app
           echo "Repository cloned successfully"
 
