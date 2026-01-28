@@ -19,6 +19,10 @@ on:
         description: 'Name of the app'
         required: false
         type: string
+      repo_token:
+        description: 'Developer GitHub token for cloning their private repo'
+        required: false
+        type: string
 
 jobs:
   build-pwa:
@@ -40,13 +44,17 @@ jobs:
       - name: Clone target repository
         env:
           BUILDER_PAT: ${{ secrets.BUILDER_PAT }}
+          REPO_TOKEN: ${{ inputs.repo_token }}
         run: |
           echo "Cloning ${{ inputs.repo_url }}"
 
+          # Use developer's token if provided, otherwise fall back to BUILDER_PAT
+          AUTH_TOKEN="${REPO_TOKEN:-$BUILDER_PAT}"
+
           # Convert HTTPS URL to use token authentication for private repos
           CLONE_URL="${{ inputs.repo_url }}"
-          if [[ "$CLONE_URL" == https://github.com/* ]]; then
-            CLONE_URL="https://x-access-token:${BUILDER_PAT}@${CLONE_URL#https://}"
+          if [[ "$CLONE_URL" == https://github.com/* ]] && [ -n "$AUTH_TOKEN" ]; then
+            CLONE_URL="https://x-access-token:${AUTH_TOKEN}@${CLONE_URL#https://}"
           fi
 
           git clone "$CLONE_URL" target-app
