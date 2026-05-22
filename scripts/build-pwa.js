@@ -321,6 +321,9 @@ function walkDir(dir, baseDir = dir) {
     const fullPath = path.join(dir, item);
     const stat = fs.statSync(fullPath);
     if (stat.isDirectory()) {
+      if (item === 'node_modules' || item.startsWith('.')) {
+        return;
+      }
       walkDir(fullPath, baseDir);
     } else {
       const relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
