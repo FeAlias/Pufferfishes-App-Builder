@@ -156,6 +156,7 @@ jobs:
           # Configure AWS CLI for R2
           aws configure set aws_access_key_id $R2_ACCESS_KEY_ID
           aws configure set aws_secret_access_key $R2_SECRET_ACCESS_KEY
+          aws configure set default.region auto
 
           # Upload all files to R2
           echo "Uploading files to R2..."
