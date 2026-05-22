@@ -118,8 +118,11 @@ jobs:
             BUILD_DIR="dist"
           elif [ -d "out" ]; then
             BUILD_DIR="out"
+          elif [ -f "index.html" ]; then
+            BUILD_DIR="."
+            echo "No build directory found, but index.html exists in root. Using root directory."
           else
-            echo "ERROR: Could not find build output directory (build/, dist/, or out/)"
+            echo "ERROR: Could not find build output directory (build/, dist/, or out/) and no index.html found in root."
             exit 1
           fi
 
