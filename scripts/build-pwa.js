@@ -46,6 +46,20 @@ if (!buildDir || !appId || !appName) {
 const buildPath = path.resolve(buildDir);
 console.log(`Injecting PWA assets into: ${buildPath}`);
 
+// Remove any remaining PWA files in build directory (final cleanup)
+console.log('Performing final PWA cleanup in build directory...');
+const oldManifest = path.join(buildPath, 'manifest.json');
+const oldManifestAlt = path.join(buildPath, 'manifest.webmanifest');
+const oldServiceWorker = path.join(buildPath, 'service-worker.js');
+const oldServiceWorkerAlt = path.join(buildPath, 'sw.js');
+
+[oldManifest, oldManifestAlt, oldServiceWorker, oldServiceWorkerAlt].forEach(file => {
+  if (fs.existsSync(file)) {
+    fs.unlinkSync(file);
+    console.log(`  Removed old PWA file: ${path.basename(file)}`);
+  }
+});
+
 // Create icons directory
 const iconsDir = path.join(buildPath, 'icons');
 if (!fs.existsSync(iconsDir)) {
@@ -130,9 +144,32 @@ if (!fs.existsSync(indexPath)) {
 
 let html = fs.readFileSync(indexPath, 'utf8');
 
-// Add PWA meta tags if not present
+// Remove existing PWA-related tags from HTML (final cleanup)
+console.log('Removing any remaining PWA tags from HTML...');
+
+// Remove old manifest links
+html = html.replace(/<link[^>]*rel=["']manifest["'][^>]*>/gi, '');
+
+// Remove old service worker registration scripts
+html = html.replace(/<script[^>]*>[\s\S]*?navigator\.serviceWorker\.register[\s\S]*?<\/script>/gi, '');
+
+// Remove old PWA meta tags
+const oldMetaPatterns = [
+  /<meta[^>]*name=["']theme-color["'][^>]*>/gi,
+  /<meta[^>]*name=["']mobile-web-app-capable["'][^>]*>/gi,
+  /<meta[^>]*name=["']apple-mobile-web-app-capable["'][^>]*>/gi,
+  /<meta[^>]*name=["']apple-mobile-web-app-status-bar-style["'][^>]*>/gi,
+  /<meta[^>]*name=["']apple-mobile-web-app-title["'][^>]*>/gi,
+  /<link[^>]*rel=["']apple-touch-icon["'][^>]*>/gi
+];
+
+oldMetaPatterns.forEach(pattern => {
+  html = html.replace(pattern, '');
+});
+
+// Add PufferFishes PWA meta tags + SDK
 const pwaMetaTags = `
-  <!-- PWA Meta Tags -->
+  <!-- PufferFishes PWA Meta Tags -->
   <meta name="theme-color" content="#4F46E5">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -141,6 +178,107 @@ const pwaMetaTags = `
   <link rel="manifest" href="/apps/${appId}/manifest.json">
   <link rel="icon" href="/apps/${appId}/icons/icon-192.png">
   <link rel="apple-touch-icon" href="/apps/${appId}/icons/icon-512.png">
+
+  <!-- PufferFishes SDK - Auto-injected for secure API access -->
+  <script>
+    // Inline SDK for immediate availability
+    // This is a minimal version - full SDK available at @pufferfishes/sdk npm package
+    (function() {
+      window.PufferFishesSDK = class {
+        constructor(config = {}) {
+          this.appId = config.appId || this.detectAppId();
+          this.debug = config.debug || false;
+          this.messageId = 0;
+          this.pendingRequests = new Map();
+          this.setupMessageListener();
+          if (this.debug) console.log('[PufferFishes SDK] Initialized for app:', this.appId);
+        }
+
+        detectAppId() {
+          const match = window.location.pathname.match(/\\/app-runner\\/([^\\/]+)/);
+          return match ? match[1] : 'unknown';
+        }
+
+        setupMessageListener() {
+          window.addEventListener('message', (event) => {
+            if (event.source !== window.parent) return;
+            const response = event.data;
+            if (response.type !== 'PF_RESPONSE') return;
+            const pending = this.pendingRequests.get(response.id);
+            if (pending) {
+              clearTimeout(pending.timeout);
+              response.error ? pending.reject(new Error(response.error)) : pending.resolve(response.data);
+              this.pendingRequests.delete(response.id);
+            }
+          });
+        }
+
+        async sendMessage(type, data, timeoutMs = 30000) {
+          const id = this.appId + '_' + (++this.messageId) + '_' + Date.now();
+          return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              this.pendingRequests.delete(id);
+              reject(new Error('Request timeout after ' + timeoutMs + 'ms'));
+            }, timeoutMs);
+            this.pendingRequests.set(id, { resolve, reject, timeout });
+            window.parent.postMessage({ id, type, appId: this.appId, data }, '*');
+          });
+        }
+
+        async requestPermission(permission) {
+          try {
+            const result = await this.sendMessage('PF_REQUEST_PERMISSION', { permission });
+            return result.granted === true;
+          } catch (error) {
+            console.error('[PufferFishes SDK] Permission request failed:', error);
+            return false;
+          }
+        }
+
+        async checkPermission(permission) {
+          try {
+            const result = await this.sendMessage('PF_CHECK_PERMISSION', { permission });
+            return result.granted === true;
+          } catch (error) {
+            return false;
+          }
+        }
+
+        get ai() {
+          return {
+            generate: async (request) => {
+              const hasPermission = await this.checkPermission('gemini_api');
+              if (!hasPermission) {
+                const granted = await this.requestPermission('gemini_api');
+                if (!granted) throw new Error('User denied API access');
+              }
+              return await this.sendMessage('PF_API_CALL', { api: 'gemini', method: 'generate', params: request });
+            }
+          };
+        }
+
+        get storage() {
+          return {
+            get: async (key) => {
+              const result = await this.sendMessage('PF_STORAGE_GET', { key });
+              return result.value;
+            },
+            set: async (key, value) => {
+              await this.sendMessage('PF_STORAGE_SET', { key, value });
+            },
+            remove: async (key) => {
+              await this.sendMessage('PF_STORAGE_REMOVE', { key });
+            }
+          };
+        }
+      };
+
+      // Make SDK available globally
+      if (typeof module !== 'undefined' && module.exports) {
+        module.exports = window.PufferFishesSDK;
+      }
+    })();
+  </script>
 `;
 
 // Add install prompt script
@@ -201,7 +339,24 @@ swContent = swContent.replace(
 );
 fs.writeFileSync(path.join(buildPath, 'service-worker.js'), swContent);
 
-console.log('PWA injection completed successfully!');
-console.log(`Total files: ${files.length}`);
-console.log(`App ID: ${appId}`);
-console.log(`Install URL: https://pufferfishes.net/apps/${appId}/`);
+// Add service worker registration verification
+const finalHtml = fs.readFileSync(indexPath, 'utf8');
+if (!finalHtml.includes('serviceWorker.register')) {
+  console.warn('WARNING: Service worker registration not found in HTML!');
+} else {
+  console.log('✓ Service worker registration verified');
+}
+
+if (!finalHtml.includes('rel="manifest"')) {
+  console.warn('WARNING: Manifest link not found in HTML!');
+} else {
+  console.log('✓ Manifest link verified');
+}
+
+console.log('\n=== PWA Injection Complete ===');
+console.log(`✓ Total files cached: ${files.length}`);
+console.log(`✓ App ID: ${appId}`);
+console.log(`✓ App Name: ${appName}`);
+console.log(`✓ Install URL: https://pufferfishes.net/apps/${appId}/`);
+console.log(`✓ Manifest URL: https://pufferfishes.net/apps/${appId}/manifest.json`);
+console.log('\nThe app is now a fully functional PWA and ready to install!');
