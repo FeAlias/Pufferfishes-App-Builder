@@ -87,7 +87,7 @@ jobs:
           npm install --legacy-peer-deps
 
           # Detect build script
-          BUILD_SCRIPT=$(node -pe "JSON.parse(fs.readFileSync('package.json')).scripts.build || 'build'")
+          BUILD_SCRIPT=$(node -pe "const s = JSON.parse(fs.readFileSync('package.json')).scripts; s && s.build ? 'build' : ''")
           echo "build_script=$BUILD_SCRIPT" >> $GITHUB_OUTPUT
 
           # Detect if React app
@@ -103,8 +103,13 @@ jobs:
         run: |
           set -euo pipefail
           cd target-app
-          echo "Running build script: ${{ steps.detect.outputs.build_script }}"
-          npm run ${{ steps.detect.outputs.build_script }}
+          BUILD_CMD="${{ steps.detect.outputs.build_script }}"
+          if [ -n "$BUILD_CMD" ]; then
+            echo "Running build script: $BUILD_CMD"
+            npm run "$BUILD_CMD"
+          else
+            echo "No build script detected in package.json, skipping build step."
+          fi
 
           # Find build output directory
           if [ -d "build" ]; then
