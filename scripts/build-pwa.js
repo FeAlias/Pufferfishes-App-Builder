@@ -195,8 +195,8 @@ const pwaMetaTags = `
         }
 
         detectAppId() {
-          const match = window.location.pathname.match(/\\/app-runner\\/([^\\/]+)/);
-          return match ? match[1] : 'unknown';
+          const match = window.location.pathname.match(/\\/(apps|app-runner)\\/([^\\/]+)/);
+          return match ? match[2] : 'unknown';
         }
 
         setupMessageListener() {
