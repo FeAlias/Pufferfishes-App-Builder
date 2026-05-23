@@ -184,6 +184,53 @@ const pwaMetaTags = `
     // Inline SDK for immediate availability
     // This is a minimal version - full SDK available at @pufferfishes/sdk npm package
     (function() {
+      // Polyfill localStorage and sessionStorage for sandboxed iframe
+      try {
+        const test = window.localStorage;
+      } catch (e) {
+        console.warn('[PufferFishes SDK] Mocking localStorage in memory due to sandbox constraints');
+        const store = {};
+        try {
+          Object.defineProperty(window, 'localStorage', {
+            value: {
+              getItem: function(key) { return store[key] || null; },
+              setItem: function(key, val) { store[key] = String(val); },
+              removeItem: function(key) { delete store[key]; },
+              clear: function() { for (const k in store) delete store[k]; },
+              key: function(i) { return Object.keys(store)[i] || null; },
+              get length() { return Object.keys(store).length; }
+            },
+            writable: true,
+            configurable: true
+          });
+        } catch (err) {
+          console.error('[PufferFishes SDK] Failed to polyfill localStorage:', err);
+        }
+      }
+
+      try {
+        const test = window.sessionStorage;
+      } catch (e) {
+        console.warn('[PufferFishes SDK] Mocking sessionStorage in memory due to sandbox constraints');
+        const store = {};
+        try {
+          Object.defineProperty(window, 'sessionStorage', {
+            value: {
+              getItem: function(key) { return store[key] || null; },
+              setItem: function(key, val) { store[key] = String(val); },
+              removeItem: function(key) { delete store[key]; },
+              clear: function() { for (const k in store) delete store[k]; },
+              key: function(i) { return Object.keys(store)[i] || null; },
+              get length() { return Object.keys(store).length; }
+            },
+            writable: true,
+            configurable: true
+          });
+        } catch (err) {
+          console.error('[PufferFishes SDK] Failed to polyfill sessionStorage:', err);
+        }
+      }
+
       window.PufferFishesSDK = class {
         constructor(config = {}) {
           this.appId = config.appId || this.detectAppId();
